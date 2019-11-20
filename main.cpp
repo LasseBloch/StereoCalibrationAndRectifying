@@ -6,20 +6,20 @@
 
 const float squareSideLength = 0.035; // in meters
 
-std::vector<cv::Point3f> calculateCornerPositonsForBoard(int boardWidth, int boardHeight, float squareSideLenght)
+std::vector<cv::Point3f> calculateCornerPositionsForBoard(int boardWidth, int boardHeight, float squaresSideLength)
 {
     std::vector<cv::Point3f> result;
     for(int i = 0; i < boardWidth; i++)
     {
         for (int j = 0; j < boardHeight; j++)
         {
-            result.emplace_back(cv::Point3f{i * squareSideLenght, j * squareSideLenght, 0.0f} );
+            result.emplace_back(cv::Point3f{i * squaresSideLength, j * squaresSideLength, 0.0f} );
         }
     }
     return result;
 }
 
-// Get a video capture for a camra, and do some validating that we can read an image from it
+// Get a video capture for a camera, and do some validating that we can read an image from it
 cv::VideoCapture getVideoCapture(int camNr)
 {
     // Cam we open the capture device
@@ -48,14 +48,26 @@ cv::VideoCapture getVideoCapture(int camNr)
     }
 }
 
+// findChessboardCorners takes a long time if the picture does not contain a chessboard
+// cvCheckChessboard should be much faster, and returns whether a pictures contains a chessboard or not
+bool CheckIfBothPicturesContainChessboard(const cv::Mat& img0, const cv::Mat& img1, const cv::Size& boardSize)
+{
+    auto startTime = std::chrono::system_clock::now();
+    std::chrono::duration<float> elapsedTime = std::chrono::system_clock::now() - startTime;
+    bool found0 = cv::checkChessboard(img0, boardSize);
+    bool found1 =  cv::checkChessboard(img0, boardSize);
+    std::cout << "It took " << elapsedTime.count() << "To see if both pictures contain a chessboard\n";
+    return found0 && found1;
+}
+
 
 void calibrateStereoCam(cv::Size boardSize, const int nrCalibPicturesToTake, cv::VideoCapture& cam0, cv::VideoCapture& cam1)
 {
     // Setup
-    cv::Mat img0, img1;
+    cv::Mat rawImg0, rawImg1, img0, img1;
     // Get image size by capturing a frame
-    cam0 >> img0;
-    cv::Size imgSize = img0.size();
+    cam0 >> rawImg0;
+    cv::Size imgSize = rawImg0.size();
 
     // imagePoints: Where the we will store the found locations of the chessboard corners
     std::vector<std::vector<cv::Point2f> > imagePoints[2];
@@ -66,63 +78,76 @@ void calibrateStereoCam(cv::Size boardSize, const int nrCalibPicturesToTake, cv:
     while(goodCalibrationParses < nrCalibPicturesToTake)
     {
         // Capture from both cams
-        cam0 >> img0;
-        cam1 >> img1;
-        if (img0.empty() || img1.empty())
+        cam0 >> rawImg0;
+        cam1 >> rawImg1;
+        if (rawImg0.empty() || rawImg1.empty())
         {
             std::cout << "Captured empty image \n";
             exit(-1);
         }
 
+        // Convert images to grey scale
+        cv::cvtColor(rawImg0, img0, cv::COLOR_BGR2GRAY);
+        cv::cvtColor(rawImg1, img1, cv::COLOR_BGR2GRAY);
         std::vector<cv::Point2f> corners0;
         std::vector<cv::Point2f> corners1;
-        // Look for corners of the chessboard
-        std::cout << "looking for corners in pictures\n";
-        auto startTime = std::chrono::system_clock::now();
-        // Wrap call to findChessboardCorners in future's to utilize multiple cores
-        std::future<bool> findCBCornersImg0 = std::async(std::launch::async, [&]{return findChessboardCorners(img0, boardSize, corners0); });
-        std::future<bool> findCBCornersImg1 = std::async(std::launch::async, [&]{return findChessboardCorners(img1, boardSize, corners1); });
-        findCBCornersImg0.wait();
-        findCBCornersImg1.wait();
-        auto found0 = findCBCornersImg0.get();
-        auto found1 = findCBCornersImg1.get();
-        std::chrono::duration<float> elapsedTime = std::chrono::system_clock::now() - startTime;
-        std::cout << "It took " << elapsedTime.count() << '\n';
-
-
-        if (found0 && found1)
+        if (CheckIfBothPicturesContainChessboard(img0, img1, boardSize))
         {
-            // For img0
-            cv::Mat cimg0, cimg01;
-            // For img1
-            cv::Mat cimg1, cimg11;
-            // Greyscale them images
-            cvtColor(img0, cimg0, cv::COLOR_GRAY2BGR);
-            cvtColor(img1, cimg1, cv::COLOR_GRAY2BGR);
-            // Draw corners on the greyscales
-            drawChessboardCorners(cimg0, boardSize, corners0, found0);
-            drawChessboardCorners(cimg1, boardSize, corners1, found1);
-            // Calculate scale factor (should same for both)
-            double sf = 640./MAX(img0.rows, img0.cols);
-            // Resize both images
-            resize(cimg0, cimg01, cv::Size(), sf, sf, cv::INTER_LINEAR_EXACT);
-            resize(cimg1, cimg11, cv::Size(), sf, sf, cv::INTER_LINEAR_EXACT);
+            // Look for corners of the chessboard
+            std::cout << "looking for corners in pictures\n";
+            auto startTime = std::chrono::system_clock::now();
+            // Wrap call to findChessboardCorners in future's to utilize multiple cores
+            std::future<bool> findCBCornersImg0 = std::async(std::launch::async, [&]{return findChessboardCorners(img0, boardSize, corners0); });
+            std::future<bool> findCBCornersImg1 = std::async(std::launch::async, [&]{return findChessboardCorners(img1, boardSize, corners1); });
+            findCBCornersImg0.wait();
+            findCBCornersImg1.wait();
+            auto found0 = findCBCornersImg0.get();
+            auto found1 = findCBCornersImg1.get();
+            std::chrono::duration<float> elapsedTime = std::chrono::system_clock::now() - startTime;
+            std::cout << "It took " << elapsedTime.count() << '\n';
 
-            imshow("corners0", cimg01);
-            imshow("corners1", cimg11);
-            // When we find chessboard in both cams
-            char c = (char)cv::waitKey(500);
-            if( c == 27 || c == 'q' || c == 'Q' ) //Allow ESC to quit
+            if (found0 && found1)
             {
-                exit(-1);
+                std::cout << "Found chessboard in both images\n";
+                // For img0
+                cv::Mat img0WithCorners, img0WithCornersUpScaled;
+                // For img1
+                cv::Mat img1WithCorners, img1WithCornersUpScaled;
+
+                img0WithCorners = img0.clone();
+                img1WithCorners = img1.clone();
+
+                // Draw corners on the greyscale pictures
+                drawChessboardCorners(img0WithCorners, boardSize, corners0, found0);
+                drawChessboardCorners(img1WithCorners, boardSize, corners1, found1);
+
+                // Upscale pictures so it is easier to see if the corners are place correctly
+                // Scale factor
+                double sf = 1.5;
+                std::cout << sf << '\n';
+                // Resize both images
+                resize(img0WithCorners, img0WithCornersUpScaled, cv::Size(), sf, sf, cv::INTER_LINEAR_EXACT);
+                resize(img1WithCorners, img1WithCornersUpScaled, cv::Size(), sf, sf, cv::INTER_LINEAR_EXACT);
+
+                imshow("corners0", img0WithCornersUpScaled);
+                imshow("corners1", img1WithCornersUpScaled);
+                // Todo: Make logic to keep or discard images
+                // When we find chessboard in both cams
+                char c = (char)cv::waitKey(500);
+                if( c == 27 || c == 'q' || c == 'Q' ) //Allow ESC to quit
+                {
+                    exit(-1);
+                }
+                goodCalibrationParses++;
             }
-            goodCalibrationParses++;
         }
+
+
         // Display images
         cv::imshow("img0", img0);
         cv::imshow("img1", img1);
         std::cout << "Looping around \n";
-        char c = (char)cv::waitKey(1000);
+        char c = (char)cv::waitKey(10);
         if( c == 27 || c == 'q' || c == 'Q' ) //Allow ESC to quit
         {
             exit(-1);
@@ -133,7 +158,7 @@ void calibrateStereoCam(cv::Size boardSize, const int nrCalibPicturesToTake, cv:
 
 int main()
 {
-    // board width and hight is the actually the number of inner corners on the calibration chessboard
+    // board width and height is the actually the number of inner corners on the calibration chessboard
     const auto boardWight{7};
     const auto boardHeight{5};
     const cv::Size boardSize{boardWight, boardHeight};
