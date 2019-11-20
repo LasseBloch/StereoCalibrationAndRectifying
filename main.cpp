@@ -1,5 +1,7 @@
 #include <iostream>
 #include <opencv2/opencv.hpp>
+#include <chrono>
+#include <future>
 #include <vector>
 
 const float squareSideLength = 0.035; // in meters
@@ -75,8 +77,18 @@ void calibrateStereoCam(cv::Size boardSize, const int nrCalibPicturesToTake, cv:
         std::vector<cv::Point2f> corners0;
         std::vector<cv::Point2f> corners1;
         // Look for corners of the chessboard
-        auto found0 = findChessboardCorners(img0, boardSize, corners0);
-        auto found1 = findChessboardCorners(img0, boardSize, corners1);
+        std::cout << "looking for corners in pictures\n";
+        auto startTime = std::chrono::system_clock::now();
+        // Wrap call to findChessboardCorners in future's to utilize multiple cores
+        std::future<bool> findCBCornersImg0 = std::async(std::launch::async, [&]{return findChessboardCorners(img0, boardSize, corners0); });
+        std::future<bool> findCBCornersImg1 = std::async(std::launch::async, [&]{return findChessboardCorners(img1, boardSize, corners1); });
+        findCBCornersImg0.wait();
+        findCBCornersImg1.wait();
+        auto found0 = findCBCornersImg0.get();
+        auto found1 = findCBCornersImg1.get();
+        std::chrono::duration<float> elapsedTime = std::chrono::system_clock::now() - startTime;
+        std::cout << "It took " << elapsedTime.count() << '\n';
+
 
         if (found0 && found1)
         {
@@ -109,7 +121,8 @@ void calibrateStereoCam(cv::Size boardSize, const int nrCalibPicturesToTake, cv:
         // Display images
         cv::imshow("img0", img0);
         cv::imshow("img1", img1);
-        char c = (char)cv::waitKey(20);
+        std::cout << "Looping around \n";
+        char c = (char)cv::waitKey(1000);
         if( c == 27 || c == 'q' || c == 'Q' ) //Allow ESC to quit
         {
             exit(-1);
