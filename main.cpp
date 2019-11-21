@@ -60,6 +60,26 @@ bool CheckIfBothPicturesContainChessboard(const cv::Mat& img0, const cv::Mat& im
     return found0 && found1;
 }
 
+// Looks for chessboards in two images
+std::pair<bool, bool> FindChessboardInBothImages(const cv::Size& boardSize, const cv::Mat& img0,
+                                                 const cv::Mat img1, std::vector<cv::Point2f>& foundCorners0,
+                                                 std::vector<cv::Point2f>& foundCorners1)
+{
+    // Look for corners of the chessboard
+    std::cout << "looking for corners in pictures\n";
+    auto startTime = std::chrono::system_clock::now();
+    // Wrap call to findChessboardCorners in future's to utilize multiple cores
+    std::future<bool> findCBCornersImg0 = std::async(std::launch::async, [&]{return findChessboardCorners(img0, boardSize, foundCorners0); });
+    std::future<bool> findCBCornersImg1 = std::async(std::launch::async, [&]{return findChessboardCorners(img1, boardSize, foundCorners1); });
+    findCBCornersImg0.wait();
+    findCBCornersImg1.wait();
+    auto found0 = findCBCornersImg0.get();
+    auto found1 = findCBCornersImg1.get();
+    std::chrono::duration<float> elapsedTime = std::chrono::system_clock::now() - startTime;
+    std::cout << "It took " << elapsedTime.count() << '\n';
+    std::cout << found0 << " " << found1 << '\n';
+    return {found0, found1};
+}
 
 void calibrateStereoCam(cv::Size boardSize, const int nrCalibPicturesToTake, cv::VideoCapture& cam0, cv::VideoCapture& cam1)
 {
@@ -93,19 +113,7 @@ void calibrateStereoCam(cv::Size boardSize, const int nrCalibPicturesToTake, cv:
         std::vector<cv::Point2f> corners1;
         if (CheckIfBothPicturesContainChessboard(img0, img1, boardSize))
         {
-            // Look for corners of the chessboard
-            std::cout << "looking for corners in pictures\n";
-            auto startTime = std::chrono::system_clock::now();
-            // Wrap call to findChessboardCorners in future's to utilize multiple cores
-            std::future<bool> findCBCornersImg0 = std::async(std::launch::async, [&]{return findChessboardCorners(img0, boardSize, corners0); });
-            std::future<bool> findCBCornersImg1 = std::async(std::launch::async, [&]{return findChessboardCorners(img1, boardSize, corners1); });
-            findCBCornersImg0.wait();
-            findCBCornersImg1.wait();
-            auto found0 = findCBCornersImg0.get();
-            auto found1 = findCBCornersImg1.get();
-            std::chrono::duration<float> elapsedTime = std::chrono::system_clock::now() - startTime;
-            std::cout << "It took " << elapsedTime.count() << '\n';
-
+            auto [found0, found1] = FindChessboardInBothImages(boardSize, img0, img1, corners0, corners1);
             if (found0 && found1)
             {
                 std::cout << "Found chessboard in both images\n";
