@@ -91,7 +91,7 @@ void calibrateStereoCam(cv::Size boardSize, const int nrCalibPicturesToTake, cv:
 
     // imagePoints: Where the we will store the found locations of the chessboard corners
     std::vector<std::vector<cv::Point2f> > imagePoints[2];
-    std::vector<std::vector<cv::Point3f> > objectPoints;
+    std::vector<std::vector<cv::Point3f> > objectPoints[2];
 
     // Capture calibration pictures
     int goodCalibrationParses{0};
@@ -141,14 +141,24 @@ void calibrateStereoCam(cv::Size boardSize, const int nrCalibPicturesToTake, cv:
                 imshow("corners1", img1WithCornersUpScaled);
                 // Todo: Make logic to keep or discard images
                 // When we find chessboard in both cams
-                char c = (char)cv::waitKey(500);
+                std::cout << "Press k to keep the picture and use it for calibration\n";
+                std::cout << "Press esc or q to quit all together\n";
+                std::cout << "Press any other key to discard image \n";
+                char c = (char)cv::waitKey();
                 if( c == 27 || c == 'q' || c == 'Q' ) //Allow ESC to quit
                 {
                     exit(-1);
                 }
-                goodCalibrationParses++;
+                else if (c == 'k' || c == 'K')
+                {
+                    std::cout << "keeping pictures\n";
+                    imagePoints[0].push_back(corners0);
+                    imagePoints[1].push_back(corners1);
+                    goodCalibrationParses++;
+                }
             }
         }
+
 
 
         // Display images
@@ -161,6 +171,42 @@ void calibrateStereoCam(cv::Size boardSize, const int nrCalibPicturesToTake, cv:
             exit(-1);
         }
     }
+
+    // We have all the points we need, lets to a calibration
+    auto worldCornerPositions = calculateCornerPositionsForBoard(boardSize.width, boardSize.height, squareSideLength);
+    // because we are using the same board for all the object_points we know that the corner position should be the same
+    // for all the images
+    objectPoints[0].push_back(worldCornerPositions);
+    objectPoints[1].push_back(worldCornerPositions);
+    objectPoints[0].resize(imagePoints[0].size(), worldCornerPositions);
+    objectPoints[1].resize(imagePoints[1].size(), worldCornerPositions);
+    // TODO: Cleanup and use real stereo calibration
+    cv::Mat intrinsicMatrix, distortionCoeffs;
+
+    double err = cv::calibrateCamera(
+            objectPoints[0],
+            imagePoints[0],
+            imgSize,
+            intrinsicMatrix,
+            distortionCoeffs,
+            cv::noArray(),
+            cv::noArray(),
+            cv::CALIB_ZERO_TANGENT_DIST | cv::CALIB_FIX_PRINCIPAL_POINT
+    );
+
+    std::cout << "cam0:\n" << intrinsicMatrix << '\n' << distortionCoeffs << '\n';
+
+    err = cv::calibrateCamera(
+            objectPoints[1],
+            imagePoints[1],
+            imgSize,
+            intrinsicMatrix,
+            distortionCoeffs,
+            cv::noArray(),
+            cv::noArray(),
+            cv::CALIB_ZERO_TANGENT_DIST | cv::CALIB_FIX_PRINCIPAL_POINT
+    );
+
 }
 
 
@@ -173,7 +219,7 @@ int main()
 
     // Number of pictures to use for the stereo calibration, by capturing them directly from the cam
     // TODO: Change this to read a series of pictures from disk
-    const int nrCalibrationPictures{10};
+    const int nrCalibrationPictures{2};
 
     auto cam0 = getVideoCapture(0);
     auto cam1 = getVideoCapture(1);
