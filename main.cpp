@@ -81,6 +81,35 @@ std::pair<bool, bool> FindChessboardInBothImages(const cv::Size& boardSize, cons
     return {found0, found1};
 }
 
+// Show upscaled version of the pictures with corners om them
+void showUpscaledImagesWithCorners(const cv::Size& boardSize, const cv::Mat& img0, const cv::Mat& img1,
+                                   const std::vector<cv::Point2f>& corners0, const std::vector<cv::Point2f>& corners1)
+{
+    std::cout << "Found chessboard in both images\n";
+    // For img0
+    cv::Mat img0WithCorners, img0WithCornersUpScaled;
+    // For img1
+    cv::Mat img1WithCorners, img1WithCornersUpScaled;
+
+    img0WithCorners = img0.clone();
+    img1WithCorners = img1.clone();
+
+    // Draw corners on the greyscale pictures
+    drawChessboardCorners(img0WithCorners, boardSize, corners0, true);
+    drawChessboardCorners(img1WithCorners, boardSize, corners1, true);
+
+    // Upscale pictures so it is easier to see if the corners are place correctly
+    // Scale factor
+    double sf = 1.5;
+    std::cout << sf << '\n';
+    // Resize both images
+    resize(img0WithCorners, img0WithCornersUpScaled, cv::Size(), sf, sf, cv::INTER_LINEAR_EXACT);
+    resize(img1WithCorners, img1WithCornersUpScaled, cv::Size(), sf, sf, cv::INTER_LINEAR_EXACT);
+
+    imshow("corners0", img0WithCornersUpScaled);
+    imshow("corners1", img1WithCornersUpScaled);
+}
+
 void calibrateStereoCam(cv::Size boardSize, const int nrCalibPicturesToTake, cv::VideoCapture& cam0, cv::VideoCapture& cam1)
 {
     // Setup
@@ -116,29 +145,7 @@ void calibrateStereoCam(cv::Size boardSize, const int nrCalibPicturesToTake, cv:
             auto [found0, found1] = FindChessboardInBothImages(boardSize, img0, img1, corners0, corners1);
             if (found0 && found1)
             {
-                std::cout << "Found chessboard in both images\n";
-                // For img0
-                cv::Mat img0WithCorners, img0WithCornersUpScaled;
-                // For img1
-                cv::Mat img1WithCorners, img1WithCornersUpScaled;
-
-                img0WithCorners = img0.clone();
-                img1WithCorners = img1.clone();
-
-                // Draw corners on the greyscale pictures
-                drawChessboardCorners(img0WithCorners, boardSize, corners0, found0);
-                drawChessboardCorners(img1WithCorners, boardSize, corners1, found1);
-
-                // Upscale pictures so it is easier to see if the corners are place correctly
-                // Scale factor
-                double sf = 1.5;
-                std::cout << sf << '\n';
-                // Resize both images
-                resize(img0WithCorners, img0WithCornersUpScaled, cv::Size(), sf, sf, cv::INTER_LINEAR_EXACT);
-                resize(img1WithCorners, img1WithCornersUpScaled, cv::Size(), sf, sf, cv::INTER_LINEAR_EXACT);
-
-                imshow("corners0", img0WithCornersUpScaled);
-                imshow("corners1", img1WithCornersUpScaled);
+                showUpscaledImagesWithCorners(boardSize, img0, img1, corners0, corners1);
                 // Todo: Make logic to keep or discard images
                 // When we find chessboard in both cams
                 std::cout << "Press k to keep the picture and use it for calibration\n";
