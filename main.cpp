@@ -188,14 +188,15 @@ void calibrateStereoCam(cv::Size boardSize, const int nrCalibPicturesToTake, cv:
     objectPoints[0].resize(imagePoints[0].size(), worldCornerPositions);
     objectPoints[1].resize(imagePoints[1].size(), worldCornerPositions);
     // TODO: Cleanup and use real stereo calibration
-    cv::Mat intrinsicMatrix, distortionCoeffs;
+    cv::Mat intrinsicMatrix0, distortionCoeffs0;
+    cv::Mat intrinsicMatrix1, distortionCoeffs1;
 
     double err = cv::calibrateCamera(
             objectPoints[0],
             imagePoints[0],
             imgSize,
-            intrinsicMatrix,
-            distortionCoeffs,
+            intrinsicMatrix0,
+            distortionCoeffs0,
             cv::noArray(),
             cv::noArray(),
             cv::CALIB_ZERO_TANGENT_DIST | cv::CALIB_FIX_PRINCIPAL_POINT
@@ -207,12 +208,20 @@ void calibrateStereoCam(cv::Size boardSize, const int nrCalibPicturesToTake, cv:
             objectPoints[1],
             imagePoints[1],
             imgSize,
-            intrinsicMatrix,
-            distortionCoeffs,
+            intrinsicMatrix1,
+            distortionCoeffs1,
             cv::noArray(),
             cv::noArray(),
             cv::CALIB_ZERO_TANGENT_DIST | cv::CALIB_FIX_PRINCIPAL_POINT
     );
+
+    cv::Mat R, T, E, F;
+    // R - Rotation matrix between 1st and 2nd camera coordinate systems
+    // T - Translation vector between the coordinate systems of the cameras
+    // E - Essential matrix
+    // F - Fundamental matrix
+    //double stereoError = cv::stereoCalibrate()
+
 
 }
 
