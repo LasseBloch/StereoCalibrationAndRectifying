@@ -75,6 +75,14 @@ std::pair<bool, bool> FindChessboardInBothImages(const cv::Size& boardSize, cons
     findCBCornersImg1.wait();
     auto found0 = findCBCornersImg0.get();
     auto found1 = findCBCornersImg1.get();
+    // If both found make sub pixel correction of corners
+    if (found0 && found1)
+    {
+        cv::cornerSubPix(img0, foundCorners0, {5, 5}, {-1, -1},
+                cv::TermCriteria(cv::TermCriteria::COUNT+cv::TermCriteria::EPS,30, 0.01));
+        cv::cornerSubPix(img1, foundCorners1, {5, 5}, {-1, -1},
+                cv::TermCriteria(cv::TermCriteria::COUNT+cv::TermCriteria::EPS,30, 0.01));
+    }
     std::chrono::duration<float> elapsedTime = std::chrono::system_clock::now() - startTime;
     std::cout << "It took " << elapsedTime.count() << '\n';
     std::cout << found0 << " " << found1 << '\n';
@@ -146,8 +154,6 @@ void calibrateStereoCam(cv::Size boardSize, const int nrCalibPicturesToTake, cv:
             if (found0 && found1)
             {
                 showUpscaledImagesWithCorners(boardSize, img0, img1, corners0, corners1);
-                // Todo: Make logic to keep or discard images
-                // When we find chessboard in both cams
                 std::cout << "Press k to keep the picture and use it for calibration\n";
                 std::cout << "Press esc or q to quit all together\n";
                 std::cout << "Press any other key to discard image \n";
@@ -163,10 +169,11 @@ void calibrateStereoCam(cv::Size boardSize, const int nrCalibPicturesToTake, cv:
                     imagePoints[1].push_back(corners1);
                     goodCalibrationParses++;
                 }
+                // Destroy windows for upscaled images
+                cv::destroyWindow("corners0");
+                cv::destroyWindow("corners1");
             }
         }
-
-
 
         // Display images
         cv::imshow("img0", img0);
@@ -202,7 +209,7 @@ void calibrateStereoCam(cv::Size boardSize, const int nrCalibPicturesToTake, cv:
             cv::CALIB_ZERO_TANGENT_DIST | cv::CALIB_FIX_PRINCIPAL_POINT
     );
 
-    std::cout << "cam0:\n" << intrinsicMatrix << '\n' << distortionCoeffs << '\n';
+    std::cout << "cam0:\n" << intrinsicMatrix0 << '\n' << distortionCoeffs0 << '\n';
 
     err = cv::calibrateCamera(
             objectPoints[1],
@@ -215,13 +222,26 @@ void calibrateStereoCam(cv::Size boardSize, const int nrCalibPicturesToTake, cv:
             cv::CALIB_ZERO_TANGENT_DIST | cv::CALIB_FIX_PRINCIPAL_POINT
     );
 
+    std::cout << "cam1:\n" << intrinsicMatrix1 << '\n' << distortionCoeffs1 << '\n';
     cv::Mat R, T, E, F;
     // R - Rotation matrix between 1st and 2nd camera coordinate systems
     // T - Translation vector between the coordinate systems of the cameras
     // E - Essential matrix
     // F - Fundamental matrix
-    //double stereoError = cv::stereoCalibrate()
+    double stereoError = cv::stereoCalibrate(objectPoints[0],
+                                             imagePoints[0],
+                                             imagePoints[1],
+                                             intrinsicMatrix0,
+                                             distortionCoeffs0,
+                                             intrinsicMatrix1,
+                                             distortionCoeffs0,
+                                             imgSize,
+                                             R,
+                                             T,
+                                             E,
+                                             F);
 
+    std::cout << "Done " << stereoError << '\n';
 
 }
 
