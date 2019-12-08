@@ -243,6 +243,72 @@ void calibrateStereoCam(cv::Size boardSize, const int nrCalibPicturesToTake, cv:
 
     std::cout << "Done " << stereoError << '\n';
 
+    // Computes the undistortion and rectification transformation map.
+    // Precompute maps for cvRemap()
+    cv::Mat R1, R2, P1, P2, map11, map12, map21, map22;
+
+    cv::initUndistortRectifyMap(intrinsicMatrix0, distortionCoeffs0, R1, P1, imgSize, CV_16SC2, map11, map12);
+    cv::initUndistortRectifyMap(intrinsicMatrix1, distortionCoeffs1, R2, P2, imgSize, CV_16SC2, map21, map22);
+
+    cv::Mat stereoPair;
+    stereoPair.create(imgSize.height, imgSize.width * 2, CV_8UC3);
+
+    cv::Mat stereoPairRetified;
+    stereoPairRetified.create(imgSize.height, imgSize.width * 2, CV_8UC3);
+
+
+    cv::Mat img0R, img1R;
+
+    while(true)
+    {
+        cam0 >> rawImg0;
+        cam1 >> rawImg1;
+        if (rawImg0.empty() || rawImg1.empty())
+        {
+            std::cout << "Captured empty image \n";
+            exit(-1);
+        }
+
+        cv::cvtColor(rawImg0, img0, cv::COLOR_BGR2GRAY);
+        cv::cvtColor(rawImg1, img1, cv::COLOR_BGR2GRAY);
+
+        cv::Mat part = stereoPair.colRange(0, imgSize.width);
+        cv::cvtColor(img0, part, cv::COLOR_GRAY2BGR);
+        part = stereoPair.colRange(imgSize.width, imgSize.width * 2);
+        cv::cvtColor(img1, part, cv::COLOR_GRAY2BGR);
+
+        for (int j = 0; j < imgSize.height; j += 16)
+        {
+            cv::line(stereoPair, cv::Point(0, j), cv::Point(imgSize.width * 2, j),
+                     cv::Scalar(0, 255, 0));
+        }
+
+        // Rectify
+        cv::remap(img0, img0R, map11, map12, cv::INTER_LINEAR);
+        cv::remap(img1, img1R, map21, map22, cv::INTER_LINEAR);
+
+        cv::Mat partR = stereoPairRetified.colRange(0, imgSize.width);
+        cv::cvtColor(img0R, partR, cv::COLOR_GRAY2BGR);
+        partR = stereoPairRetified.colRange(imgSize.width, imgSize.width * 2);
+        cv::cvtColor(img1R, partR, cv::COLOR_GRAY2BGR);
+
+        for (int j = 0; j < imgSize.height; j += 16)
+        {
+            cv::line(stereoPairRetified, cv::Point(0, j), cv::Point(imgSize.width * 2, j),
+                     cv::Scalar(0, 255, 0));
+        }
+
+        cv::imshow("stereo", stereoPair);
+        cv::imshow("stereo rectified", stereoPairRetified);
+
+
+        char c = (char)cv::waitKey(10);
+        if( c == 27 || c == 'q' || c == 'Q' ) //Allow ESC to quit
+        {
+            exit(-1);
+        }
+    }
+
 }
 
 
@@ -255,7 +321,7 @@ int main()
 
     // Number of pictures to use for the stereo calibration, by capturing them directly from the cam
     // TODO: Change this to read a series of pictures from disk
-    const int nrCalibrationPictures{2};
+    const int nrCalibrationPictures{15};
 
     auto cam0 = getVideoCapture(0);
     auto cam1 = getVideoCapture(1);
